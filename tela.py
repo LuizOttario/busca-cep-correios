@@ -20,6 +20,7 @@ class Tela:
     def __init__(self, root):
         self.root = root
         self.busca = None
+        self.fila = queue.Queue()
 
         root.title("Busca CEP")
         root.geometry("950x350")
@@ -56,6 +57,8 @@ class Tela:
         self.arvore.pack(side="left", fill="both", expand=True)
         barra.pack(side="right", fill="y")
 
+        self.verificar_fila()
+
     def limpar(self):
         self.arvore.delete(*self.arvore.get_children())
         self.entrada.delete(0, "end")
@@ -72,16 +75,23 @@ class Tela:
         threading.Thread(target=self._pesquisar, args=(cep,), daemon=True).start()
 
     def _pesquisar(self, cep):
-        # roda fora da thread da tela
+        # roda fora da thread da tela, então não mexe em widget nenhum aqui:
+        # só manda recados pela fila e a tela lê eles no verificar_fila
         try:
             if self.busca is None:
                 self.busca = BuscaCep(oculto=True)
             enderecos = self.busca.buscar(cep, self.pedir_captcha)
-            self.root.after(0, self._mostrar, enderecos)
+            self.fila.put((self._mostrar, (enderecos,)))
         except CaptchaCancelado:
-            self.root.after(0, self._fim, "Pesquisa cancelada")
+            self.fila.put((self._fim, ("Pesquisa cancelada",)))
         except Exception as erro:
-            self.root.after(0, self._erro, str(erro))
+            self.fila.put((self._erro, (str(erro),)))
+
+    def verificar_fila(self):
+        while not self.fila.empty():
+            funcao, argumentos = self.fila.get()
+            funcao(*argumentos)
+        self.root.after(100, self.verificar_fila)
 
     def _mostrar(self, enderecos):
         for e in enderecos:
@@ -100,7 +110,7 @@ class Tela:
     def pedir_captcha(self, png):
         """Chamado pela thread da busca. Abre a janela na thread da tela e espera a resposta."""
         resposta = queue.Queue()
-        self.root.after(0, self._janela_captcha, png, resposta)
+        self.fila.put((self._janela_captcha, (png, resposta)))
         return resposta.get()
 
     def _janela_captcha(self, png, resposta):
