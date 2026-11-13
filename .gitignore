@@ -1,0 +1,4 @@
+__pycache__/
+.venv/
+enderecos.xlsx
+captcha.png
